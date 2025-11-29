@@ -1,4 +1,6 @@
 #include <SFML/Graphics.hpp>
+#include <SFML/System/Sleep.hpp>
+#include <SFML/System/Time.hpp>
 #include <SFML/Window/WindowEnums.hpp>
 
 using sf::CircleShape;
@@ -7,16 +9,17 @@ using sf::Event;
 using sf::RenderWindow;
 using sf::VideoMode;
 using std::optional;
-#define WINDOW_SIZE 200
+const int WINDOW_SIZE = 200;
+const int INITIAL_WINDOW_SIZE = 5;
 int main() {
-    RenderWindow windows[5];
-    for (int i = 0; i < 5; i++) {
+    RenderWindow windows[INITIAL_WINDOW_SIZE];
+    for (int i = 0; i < INITIAL_WINDOW_SIZE; i++) {
         windows[i].create(
             VideoMode({WINDOW_SIZE, WINDOW_SIZE}),
-            "SFML works!",
+            "SNAKE",
             sf::Style::Titlebar | sf::Style::Close
         );
-        windows[i].setFramerateLimit(10);
+        windows[i].setFramerateLimit(1);
         windows[i].setPosition({i * WINDOW_SIZE, 0});
     }
 
