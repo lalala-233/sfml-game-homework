@@ -10,6 +10,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
     message(STATUS "Detected Windows/MinGW build environment")
     
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -mwindows")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -static-libgcc -static-libstdc++")
 endif()
 
