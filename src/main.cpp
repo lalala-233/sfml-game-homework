@@ -157,6 +157,21 @@ void update(
         windows[i]->setPosition(snake_positions[i]);
     }
 
+    // A new method to proceed the snake movement
+    // Useful for some PC which have flickering issue
+    // But it makes movement more weird
+    // 
+    // if (windows.size() > 1) {
+    //     auto head = std::move(windows.front());
+    //     auto tail = std::move(windows.back());
+    //     windows.pop_back();
+    //     windows.pop_front();
+    //     windows.push_front(std::move(tail));
+    //     windows.push_front(std::move(head));
+    //     windows[1]->setPosition(snake_positions[1]);
+    // }
+    // windows[0]->setPosition(snake_positions[0]);
+
     if (new_position == food.getPosition()) {
         if (last_postion == new_position) {
             is_game_running = false;
