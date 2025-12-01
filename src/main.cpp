@@ -13,8 +13,7 @@ using std::optional;
 using std::vector;
 
 const std::int32_t WINDOW_SIZE = 240;
-// const std::uint32_t WINDOW_STYLE = sf::Style::Titlebar | sf::Style::Close;
-const std::uint32_t WINDOW_STYLE = sf::Style::None;
+const std::uint32_t WINDOW_STYLE = sf::Style::Titlebar | sf::Style::Close;
 const std::int32_t DESKTOP_SIZE_X =
     sf::VideoMode::getDesktopMode().size.x / WINDOW_SIZE * WINDOW_SIZE;
 const std::int32_t DESKTOP_SIZE_Y =
@@ -158,6 +157,10 @@ void update(
     }
 
     if (new_position == food.getPosition()) {
+        if (last_postion == new_position) {
+            is_game_running = false;
+            return;
+        }
         spawn_food(food, snake_positions);
         windows.push_back(
             std::make_unique<RenderWindow>(
