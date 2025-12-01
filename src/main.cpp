@@ -1,7 +1,8 @@
 #include <SFML/Graphics.hpp>
+#include <algorithm>
 #include <chrono>
+#include <deque>
 #include <random>
-#include <vector>
 
 using sf::Color;
 using sf::Event;
@@ -9,8 +10,8 @@ using sf::RenderWindow;
 using sf::Vector2i;
 using sf::VideoMode;
 using sf::Keyboard::Scancode;
+using std::deque;
 using std::optional;
-using std::vector;
 
 const std::int32_t WINDOW_SIZE = 240;
 const std::uint32_t WINDOW_STYLE = sf::Style::Titlebar | sf::Style::Close;
@@ -22,7 +23,7 @@ const std::chrono::milliseconds SLEEP_TIME(500);
 enum Direction { Up, Down, Left, Right };
 
 std::mt19937 rng(std::random_device {}());
-Vector2i find_available_position(const vector<Vector2i>& snake_positions) {
+Vector2i find_available_position(const deque<Vector2i>& snake_positions) {
     auto desktop_size = sf::VideoMode::getDesktopMode().size;
     std::uniform_int_distribution<int> dist_x(0, DESKTOP_SIZE_X / WINDOW_SIZE - 1);
     std::uniform_int_distribution<int> dist_y(0, DESKTOP_SIZE_Y / WINDOW_SIZE - 1);
@@ -37,7 +38,7 @@ Vector2i find_available_position(const vector<Vector2i>& snake_positions) {
     } while (!is_position_available);
     return position;
 }
-void spawn_food(RenderWindow& food, const vector<Vector2i>& snake_positions) {
+void spawn_food(RenderWindow& food, const deque<Vector2i>& snake_positions) {
     auto position = find_available_position(snake_positions);
     food.create(VideoMode({WINDOW_SIZE, WINDOW_SIZE}), "Food", WINDOW_STYLE);
     food.setFramerateLimit(1);
@@ -47,8 +48,8 @@ void spawn_food(RenderWindow& food, const vector<Vector2i>& snake_positions) {
     food.display();
 }
 void initialize_windows(
-    vector<std::unique_ptr<RenderWindow>>& windows,
-    vector<Vector2i>& snake_position
+    deque<std::unique_ptr<RenderWindow>>& windows,
+    deque<Vector2i>& snake_position
 ) {
     Vector2i position(DESKTOP_SIZE_X / 2, DESKTOP_SIZE_Y / 2);
     windows.push_back(
@@ -123,8 +124,8 @@ Vector2i get_step(Direction direction) {
 }
 void update(
     bool& is_game_running,
-    vector<std::unique_ptr<RenderWindow>>& windows,
-    vector<Vector2i>& snake_positions,
+    deque<std::unique_ptr<RenderWindow>>& windows,
+    deque<Vector2i>& snake_positions,
     RenderWindow& food,
     Direction& current_direction
 ) {
@@ -143,14 +144,14 @@ void update(
         is_game_running = false;
         return;
     }
-    for (int i = snake_positions.size() - 1; i > 0; i--) {
-        snake_positions[i] = snake_positions[i - 1];
-        if (snake_positions[i] == new_position) {
-            is_game_running = false;
-            return;
-        }
+    snake_positions.pop_back();
+    if (std::find(snake_positions.begin(), snake_positions.end(), new_position)
+        != snake_positions.end())
+    {
+        is_game_running = false;
+        return;
     }
-    snake_positions[0] = new_position;
+    snake_positions.push_front(new_position);
 
     for (int i = 0; i < windows.size(); i++) {
         windows[i]->setPosition(snake_positions[i]);
@@ -176,18 +177,36 @@ void update(
         snake_positions.push_back(last_postion);
     }
 }
-int main() {
+void game_main() {
     bool is_game_running = true;
     Direction current_direction = Right;
-    vector<Vector2i> snake_positions;
-    vector<std::unique_ptr<RenderWindow>> windows;
+    deque<Vector2i> snake_positions;
+    deque<std::unique_ptr<RenderWindow>> windows;
     initialize_windows(windows, snake_positions);
     RenderWindow food;
     spawn_food(food, snake_positions);
     auto now = std::chrono::steady_clock::now();
     while (windows[0]->isOpen() && is_game_running) {
         for (const auto& window: windows) {
-            while (const optional event = window->pollEvent()) {
+            if (window->isOpen()) {
+                while (const optional event = window->pollEvent()) {
+                    if (const auto* key_event = event->getIf<Event::KeyPressed>()) {
+                        if (try_update_direction(current_direction, key_event->scancode)) {
+                            update(
+                                is_game_running,
+                                windows,
+                                snake_positions,
+                                food,
+                                current_direction
+                            );
+                            now = std::chrono::steady_clock::now();
+                        }
+                    }
+                }
+            }
+        }
+        if (food.isOpen()) {
+            while (const optional event = food.pollEvent()) {
                 if (const auto* key_event = event->getIf<Event::KeyPressed>()) {
                     if (try_update_direction(current_direction, key_event->scancode)) {
                         update(is_game_running, windows, snake_positions, food, current_direction);
@@ -196,18 +215,17 @@ int main() {
                 }
             }
         }
-        while (const optional event = food.pollEvent()) {
-            if (const auto* key_event = event->getIf<Event::KeyPressed>()) {
-                if (try_update_direction(current_direction, key_event->scancode)) {
-                    update(is_game_running, windows, snake_positions, food, current_direction);
-                    now = std::chrono::steady_clock::now();
-                }
-            }
-        }
         if (std::chrono::steady_clock::now() - now > SLEEP_TIME) {
             update(is_game_running, windows, snake_positions, food, current_direction);
             now = std::chrono::steady_clock::now();
         }
     }
+    food.close();
+    for (auto& window: windows) {
+        window->close();
+    }
+}
+int main() {
+    game_main();
     return 0;
 }
