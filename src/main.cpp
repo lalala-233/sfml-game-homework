@@ -65,6 +65,7 @@ void initialize_windows(
     windows[0]->setPosition(position);
     snake_position.push_back(position);
 }
+// Returns true if current_direction updates
 bool try_update_direction(Direction& current_direction, Scancode scancode) {
     switch (scancode) {
         case Scancode::W:
@@ -160,7 +161,7 @@ void update(
     // A new method to proceed the snake movement
     // Useful for some PC which have flickering issue
     // But it makes movement more weird
-    // 
+    //
     // if (windows.size() > 1) {
     //     auto head = std::move(windows.front());
     //     auto tail = std::move(windows.back());
@@ -202,6 +203,11 @@ void game_main() {
     spawn_food(food, snake_positions);
     auto now = std::chrono::steady_clock::now();
     while (windows[0]->isOpen() && is_game_running) {
+        if (std::chrono::steady_clock::now() - now > SLEEP_TIME) {
+            update(is_game_running, windows, snake_positions, food, current_direction);
+            now = std::chrono::steady_clock::now();
+            continue;
+        }
         for (const auto& window: windows) {
             if (window->isOpen()) {
                 while (const optional event = window->pollEvent()) {
@@ -215,6 +221,7 @@ void game_main() {
                                 current_direction
                             );
                             now = std::chrono::steady_clock::now();
+                            break;
                         }
                     }
                 }
@@ -229,10 +236,6 @@ void game_main() {
                     }
                 }
             }
-        }
-        if (std::chrono::steady_clock::now() - now > SLEEP_TIME) {
-            update(is_game_running, windows, snake_positions, food, current_direction);
-            now = std::chrono::steady_clock::now();
         }
     }
     food.close();
