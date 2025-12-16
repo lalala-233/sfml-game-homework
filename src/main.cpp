@@ -10,8 +10,13 @@
 
 using sf::Color;
 using sf::Event;
+using sf::Font;
 using sf::RenderWindow;
+using sf::State;
+using sf::Text;
+using sf::Vector2f;
 using sf::Vector2i;
+using sf::Vector2u;
 using sf::VideoMode;
 using sf::Keyboard::Scancode;
 using std::deque;
@@ -297,8 +302,172 @@ void game_start() {
     std::cout << "window_size: " << WINDOW_SIZE << 'x' << WINDOW_SIZE << std::endl;
     std::cout << "desktop_size: " << DESKTOP_SIZE_X << 'x' << DESKTOP_SIZE_Y << std::endl;
 }
+Text get_text(
+    const Font& font,
+    const string& content,
+    int32_t size,
+    Color color,
+    Vector2u window_size,
+    float x_factor,
+    float y_factor
+) {
+    Text text(font, content, size);
+    text.setFillColor(color);
+    sf::FloatRect titleBounds = text.getLocalBounds();
+    text.setOrigin(
+        {titleBounds.getCenter().x / 2 + static_cast<int32_t>(content.length() * size / 8),
+         titleBounds.getCenter().y / 2}
+    );
+    text.setPosition({window_size.x * x_factor, window_size.y * y_factor});
+    return text;
+}
+// Returns true if the font was loaded successfully
+bool load_system_font(Font& font) {
+#ifdef _WIN32
+    const char* fontPaths[] =
+        {"C:/Windows/Fonts/arial.ttf", "C:/Windows/Fonts/verdana.ttf", nullptr};
+#elif __APPLE__
+    const char* fontPaths[] =
+        {"/System/Library/Fonts/Helvetica.ttc", "/System/Library/Fonts/Arial.ttf", nullptr};
+#elif __linux__
+    const char* fontPaths[] = {
+        "/usr/share/fonts/TTF/DejaVuSans.ttf", // ArchLinux
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        nullptr
+    };
+#endif
+
+    for (int i = 0; fontPaths[i]; i++) {
+        if (font.openFromFile(fontPaths[i])) {
+            return true;
+        }
+    }
+
+    return false;
+}
+bool should_start(Font& font) {
+    sf::RenderWindow window(
+        sf::VideoMode(VideoMode::getDesktopMode().size),
+        "Snake",
+        State::Fullscreen
+    );
+    window.setFramerateLimit(60);
+
+    bool is_first_run = font.getInfo().family.empty();
+    if (is_first_run) {
+        if (!load_system_font(font)) {
+            return false;
+        }
+    }
+
+    string TITLE_TEXT;
+    if (is_first_run) {
+        TITLE_TEXT = "Snake";
+    } else {
+        TITLE_TEXT = "You Lose!";
+    }
+    const int32_t TITLE_TEXT_SIZE = 60;
+    const Color TITLE_TEXT_COLOR = Color::Yellow;
+    const float TITLE_TEXT_X_FACTOR = 0.5;
+    const float TITLE_TEXT_Y_FACTOR = 0.15;
+    Text title_text = get_text(
+        font,
+        TITLE_TEXT,
+        TITLE_TEXT_SIZE,
+        TITLE_TEXT_COLOR,
+        window.getSize(),
+        TITLE_TEXT_X_FACTOR,
+        TITLE_TEXT_Y_FACTOR
+    );
+    title_text.setStyle(Text::Bold);
+
+    const string START_BUTTON = "Start";
+    const int32_t START_BUTTON_SIZE = 40;
+    const Color START_BUTTON_COLOR = Color::White;
+    const float START_BUTTON_X_FACTOR = 0.5;
+    const float START_BUTTON_Y_FACTOR = 0.45;
+    Text start_button = get_text(
+        font,
+        START_BUTTON,
+        START_BUTTON_SIZE,
+        START_BUTTON_COLOR,
+        window.getSize(),
+        START_BUTTON_X_FACTOR,
+        START_BUTTON_Y_FACTOR
+    );
+
+    const string EXIT_BUTTON = "Exit";
+    const int32_t EXIT_BUTTON_SIZE = 40;
+    const Color EXIT_BUTTON_COLOR = Color::White;
+    const float EXIT_BUTTON_X_FACTOR = 0.5;
+    const float EXIT_BUTTON_Y_FACTOR = 0.55;
+    Text exit_button = get_text(
+        font,
+        EXIT_BUTTON,
+        EXIT_BUTTON_SIZE,
+        EXIT_BUTTON_COLOR,
+        window.getSize(),
+        EXIT_BUTTON_X_FACTOR,
+        EXIT_BUTTON_Y_FACTOR
+    );
+    while (window.isOpen()) {
+        while (const optional event = window.pollEvent()) {
+            if (event->is<Event::Closed>()) {
+                window.close();
+                return false;
+            }
+            Vector2i mouse_position = sf::Mouse::getPosition(window);
+            Vector2f mouse_position_float(
+                static_cast<float>(mouse_position.x),
+                static_cast<float>(mouse_position.y)
+            );
+            if (const auto* mouse_pressed_event = event->getIf<Event::MouseButtonPressed>()) {
+                if (mouse_pressed_event->button == sf::Mouse::Button::Left) {
+                    if (start_button.getGlobalBounds().contains(mouse_position_float)) {
+                        window.close();
+                        return true;
+                    }
+
+                    if (exit_button.getGlobalBounds().contains(mouse_position_float)) {
+                        window.close();
+                        return false;
+                    }
+                }
+            }
+
+            if (start_button.getGlobalBounds().contains(mouse_position_float)) {
+                start_button.setFillColor(sf::Color::Green);
+                start_button.setScale({1.1f, 1.1f});
+            } else {
+                start_button.setFillColor(START_BUTTON_COLOR);
+                start_button.setScale({1.0f, 1.0f});
+            }
+
+            if (exit_button.getGlobalBounds().contains(mouse_position_float)) {
+                exit_button.setFillColor(sf::Color::Red);
+                exit_button.setScale({1.1f, 1.1f});
+            } else {
+                exit_button.setFillColor(EXIT_BUTTON_COLOR);
+                exit_button.setScale({1.0f, 1.0f});
+            }
+        }
+        window.clear(Color::Transparent);
+
+        window.draw(start_button);
+        window.draw(exit_button);
+        window.draw(title_text);
+
+        // 显示
+        window.display();
+    }
+    return false;
+}
 int main() {
+    sf::Font font;
     game_start();
-    game_main();
+    while (should_start(font)) {
+        game_main();
+    }
     return 0;
 }
