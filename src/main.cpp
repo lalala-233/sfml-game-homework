@@ -2,7 +2,11 @@
 #include <algorithm>
 #include <chrono>
 #include <deque>
+#include <fstream>
+#include <iostream>
+#include <map>
 #include <random>
+#include <string>
 
 using sf::Color;
 using sf::Event;
@@ -11,20 +15,24 @@ using sf::Vector2i;
 using sf::VideoMode;
 using sf::Keyboard::Scancode;
 using std::deque;
+using std::ifstream;
+using std::map;
 using std::optional;
+using std::string;
+using std::unique_ptr;
+using std::chrono::milliseconds;
+using std::chrono::steady_clock;
 
-const std::int32_t WINDOW_SIZE = 240;
-const std::uint32_t WINDOW_STYLE = sf::Style::Titlebar | sf::Style::Close;
-const std::int32_t DESKTOP_SIZE_X =
-    sf::VideoMode::getDesktopMode().size.x / WINDOW_SIZE * WINDOW_SIZE;
-const std::int32_t DESKTOP_SIZE_Y =
-    sf::VideoMode::getDesktopMode().size.y / WINDOW_SIZE * WINDOW_SIZE;
-const std::chrono::milliseconds SLEEP_TIME(500);
+const string CONFIG_NAME = "snake.conf";
+uint32_t WINDOW_SIZE = 240;
+int32_t DESKTOP_SIZE_X = VideoMode::getDesktopMode().size.x / WINDOW_SIZE * WINDOW_SIZE;
+int32_t DESKTOP_SIZE_Y = VideoMode::getDesktopMode().size.y / WINDOW_SIZE * WINDOW_SIZE;
+const uint32_t WINDOW_STYLE = sf::Style::Titlebar | sf::Style::Close;
+const milliseconds SLEEP_TIME(500);
 enum Direction { Up, Down, Left, Right };
-
 std::mt19937 rng(std::random_device {}());
+
 Vector2i find_available_position(const deque<Vector2i>& snake_positions) {
-    auto desktop_size = sf::VideoMode::getDesktopMode().size;
     std::uniform_int_distribution<int> dist_x(0, DESKTOP_SIZE_X / WINDOW_SIZE - 1);
     std::uniform_int_distribution<int> dist_y(0, DESKTOP_SIZE_Y / WINDOW_SIZE - 1);
     bool is_position_available = true;
@@ -43,7 +51,7 @@ void spawn_food(RenderWindow& food, const deque<Vector2i>& snake_positions) {
     food.create(VideoMode({WINDOW_SIZE, WINDOW_SIZE}), "Food", WINDOW_STYLE);
     food.setFramerateLimit(1);
     food.setPosition(position);
-
+    std::cout << "food position: " << position.x << 'x' << position.y << std::endl;
     food.clear(Color::Green);
     food.display();
 }
@@ -51,7 +59,11 @@ void initialize_windows(
     deque<std::unique_ptr<RenderWindow>>& windows,
     deque<Vector2i>& snake_position
 ) {
-    Vector2i position(DESKTOP_SIZE_X / 2, DESKTOP_SIZE_Y / 2);
+    // make sure position is valid
+    Vector2i position(
+        DESKTOP_SIZE_X / WINDOW_SIZE / 2 * WINDOW_SIZE,
+        DESKTOP_SIZE_Y / WINDOW_SIZE / 2 * WINDOW_SIZE
+    );
     windows.push_back(
         std::make_unique<RenderWindow>(
             VideoMode({WINDOW_SIZE, WINDOW_SIZE}),
@@ -59,6 +71,7 @@ void initialize_windows(
             WINDOW_STYLE
         )
     );
+    std::cout << "snake_head position: " << position.x << 'x' << position.y << std::endl;
     windows[0]->setFramerateLimit(0);
     windows[0]->clear(Color::Red);
     windows[0]->display();
@@ -193,49 +206,53 @@ void update(
         snake_positions.push_back(last_postion);
     }
 }
+// Returns true if current direction updates
+bool try_update_current_direction(
+    const deque<unique_ptr<RenderWindow>>& windows,
+    const deque<Vector2i>& snake_positions,
+    RenderWindow& food,
+    Direction& current_direction
+) {
+    for (const auto& window: windows) {
+        if (window->isOpen()) {
+            while (const optional event = window->pollEvent()) {
+                if (const auto* key_event = event->getIf<Event::KeyPressed>()) {
+                    if (try_update_direction(current_direction, key_event->scancode)) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    if (food.isOpen()) {
+        while (const optional event = food.pollEvent()) {
+            if (const auto* key_event = event->getIf<Event::KeyPressed>()) {
+                if (try_update_direction(current_direction, key_event->scancode)) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
 void game_main() {
     bool is_game_running = true;
     Direction current_direction = Right;
     deque<Vector2i> snake_positions;
-    deque<std::unique_ptr<RenderWindow>> windows;
+    deque<unique_ptr<RenderWindow>> windows;
     initialize_windows(windows, snake_positions);
     RenderWindow food;
     spawn_food(food, snake_positions);
     auto now = std::chrono::steady_clock::now();
-    while (windows[0]->isOpen() && is_game_running) {
+    while (is_game_running) {
         if (std::chrono::steady_clock::now() - now > SLEEP_TIME) {
             update(is_game_running, windows, snake_positions, food, current_direction);
             now = std::chrono::steady_clock::now();
             continue;
         }
-        for (const auto& window: windows) {
-            if (window->isOpen()) {
-                while (const optional event = window->pollEvent()) {
-                    if (const auto* key_event = event->getIf<Event::KeyPressed>()) {
-                        if (try_update_direction(current_direction, key_event->scancode)) {
-                            update(
-                                is_game_running,
-                                windows,
-                                snake_positions,
-                                food,
-                                current_direction
-                            );
-                            now = std::chrono::steady_clock::now();
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        if (food.isOpen()) {
-            while (const optional event = food.pollEvent()) {
-                if (const auto* key_event = event->getIf<Event::KeyPressed>()) {
-                    if (try_update_direction(current_direction, key_event->scancode)) {
-                        update(is_game_running, windows, snake_positions, food, current_direction);
-                        now = std::chrono::steady_clock::now();
-                    }
-                }
-            }
+        if (try_update_current_direction(windows, snake_positions, food, current_direction)) {
+            update(is_game_running, windows, snake_positions, food, current_direction);
+            now = std::chrono::steady_clock::now();
         }
     }
     food.close();
@@ -243,7 +260,45 @@ void game_main() {
         window->close();
     }
 }
+map<string, string> read_config(const string& filename) {
+    ifstream file(filename);
+    map<string, string> config;
+    if (!file.is_open()) {
+        return config;
+    }
+    string line;
+    while (getline(file, line)) {
+        if (line.empty() || line[0] == '#') {
+            continue;
+        }
+        size_t pos = line.find('=');
+        if (pos != string::npos) {
+            string key = line.substr(0, pos);
+            string value = line.substr(pos + 1);
+            config[key] = value;
+        }
+    }
+    return config;
+}
+void game_start() {
+    auto config = read_config(CONFIG_NAME);
+    auto snake_body_size = config["snake_body_size"];
+    if (!snake_body_size.empty()) {
+        if (snake_body_size == "\"small\"") {
+            WINDOW_SIZE = 180;
+        } else if (snake_body_size == "\"large\"") {
+            WINDOW_SIZE = 360;
+        } else {
+            WINDOW_SIZE = 240;
+        }
+    }
+    DESKTOP_SIZE_X = VideoMode::getDesktopMode().size.x / WINDOW_SIZE * WINDOW_SIZE;
+    DESKTOP_SIZE_Y = VideoMode::getDesktopMode().size.y / WINDOW_SIZE * WINDOW_SIZE;
+    std::cout << "window_size: " << WINDOW_SIZE << 'x' << WINDOW_SIZE << std::endl;
+    std::cout << "desktop_size: " << DESKTOP_SIZE_X << 'x' << DESKTOP_SIZE_Y << std::endl;
+}
 int main() {
+    game_start();
     game_main();
     return 0;
 }
