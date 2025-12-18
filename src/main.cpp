@@ -22,6 +22,7 @@ using sf::Keyboard::Scancode;
 using std::deque;
 using std::ifstream;
 using std::map;
+using std::ofstream;
 using std::optional;
 using std::string;
 using std::unique_ptr;
@@ -31,6 +32,7 @@ using std::chrono::steady_clock;
 uint32_t WINDOW_SIZE = 240;
 int32_t DESKTOP_SIZE_X = VideoMode::getDesktopMode().size.x / WINDOW_SIZE * WINDOW_SIZE;
 int32_t DESKTOP_SIZE_Y = VideoMode::getDesktopMode().size.y / WINDOW_SIZE * WINDOW_SIZE;
+map<string, string> config;
 const string CONFIG_NAME = "snake.conf";
 const uint32_t WINDOW_STYLE = sf::Style::Titlebar | sf::Style::Close;
 const milliseconds SLEEP_TIME(500);
@@ -286,7 +288,7 @@ map<string, string> read_config(const string& filename) {
     return config;
 }
 void game_start() {
-    auto config = read_config(CONFIG_NAME);
+    config = read_config(CONFIG_NAME);
     auto snake_body_size = config["snake_body_size"];
     if (!snake_body_size.empty()) {
         if (snake_body_size == "\"small\"") {
@@ -479,11 +481,46 @@ bool should_start(Font& font) {
     }
     return false;
 }
+void write_temp_file(ofstream& temp_file) {
+    const string SNAKE_BODY_SIZE_COMMENT = "# Optional values: small, medium, large";
+    string snake_body_size = config["snake_body_size"];
+    if (snake_body_size.empty()) {
+        snake_body_size = "\"medium\"";
+    }
+    temp_file << SNAKE_BODY_SIZE_COMMENT << std::endl;
+    temp_file << "snake_body_size=" << snake_body_size << std::endl;
+    temp_file.close();
+}
+void game_end() {
+    const string TEMP_FILE = CONFIG_NAME + ".temp";
+    const string BACKUP_FILE = CONFIG_NAME + ".bak";
+    ofstream temp_file(TEMP_FILE);
+    if (!temp_file) {
+        std::cerr << "cannot create temp file" << std::endl;
+        return;
+    }
+    write_temp_file(temp_file);
+    if (!temp_file.good()) {
+        std::filesystem::remove(TEMP_FILE);
+        std::cerr << "cannot write temp file" << std::endl;
+        return;
+    }
+
+    bool has_original = std::filesystem::exists(CONFIG_NAME);
+    if (has_original) {
+        std::filesystem::rename(CONFIG_NAME, BACKUP_FILE);
+    }
+    std::filesystem::rename(TEMP_FILE, CONFIG_NAME);
+    if (has_original) {
+        std::filesystem::remove(BACKUP_FILE);
+    }
+}
 int main() {
-    sf::Font font;
+    Font font;
     game_start();
     while (should_start(font)) {
         game_main();
     }
+    game_end();
     return 0;
 }
