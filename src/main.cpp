@@ -28,10 +28,10 @@ using std::unique_ptr;
 using std::chrono::milliseconds;
 using std::chrono::steady_clock;
 
-const string CONFIG_NAME = "snake.conf";
 uint32_t WINDOW_SIZE = 240;
 int32_t DESKTOP_SIZE_X = VideoMode::getDesktopMode().size.x / WINDOW_SIZE * WINDOW_SIZE;
 int32_t DESKTOP_SIZE_Y = VideoMode::getDesktopMode().size.y / WINDOW_SIZE * WINDOW_SIZE;
+const string CONFIG_NAME = "snake.conf";
 const uint32_t WINDOW_STYLE = sf::Style::Titlebar | sf::Style::Close;
 const milliseconds SLEEP_TIME(500);
 enum Direction { Up, Down, Left, Right };
@@ -324,20 +324,36 @@ Text get_text(
 // Returns true if the font was loaded successfully
 bool load_system_font(Font& font) {
 #ifdef _WIN32
-    const char* fontPaths[] =
-        {"C:/Windows/Fonts/arial.ttf", "C:/Windows/Fonts/verdana.ttf", nullptr};
+    const char* fontPaths[] = {
+        "C:/Windows/Fonts/msyh.ttc",
+        "C:/Windows/Fonts/simsun.ttc",
+        "C:/Windows/Fonts/segoeui.ttf",
+        "C:/Windows/Fonts/arial.ttf",
+        "C:/Windows/Fonts/verdana.ttf",
+        nullptr
+    };
 #elif __APPLE__
-    const char* fontPaths[] =
-        {"/System/Library/Fonts/Helvetica.ttc", "/System/Library/Fonts/Arial.ttf", nullptr};
+    const char* fontPaths[] = {
+        "/System/Library/Fonts/PingFang.ttc",
+        "/System/Library/Fonts/Helvetica.ttc",
+        "/System/Library/Fonts/SFNS.ttf",
+        "/System/Library/Fonts/Arial.ttf",
+        nullptr
+    };
 #elif __linux__
     const char* fontPaths[] = {
-        "/usr/share/fonts/TTF/DejaVuSans.ttf", // ArchLinux
+        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        // ArchLinux
+        "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/TTF/dejavu/DejaVuSans.ttf",
         nullptr
     };
 #endif
-
     for (int i = 0; fontPaths[i]; i++) {
         if (font.openFromFile(fontPaths[i])) {
             return true;
