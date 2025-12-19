@@ -1,12 +1,10 @@
 #include <SFML/Graphics.hpp>
 #include <algorithm>
-#include <chrono>
 #include <deque>
 #include <fstream>
 #include <iostream>
 #include <map>
 #include <random>
-#include <string>
 
 using sf::Color;
 using sf::Event;
@@ -26,6 +24,7 @@ using std::ofstream;
 using std::optional;
 using std::string;
 using std::unique_ptr;
+using std::vector;
 using std::chrono::milliseconds;
 using std::chrono::steady_clock;
 
@@ -37,6 +36,17 @@ const string CONFIG_NAME = "snake.conf";
 const uint32_t WINDOW_STYLE = sf::Style::Titlebar | sf::Style::Close;
 const milliseconds SLEEP_TIME(500);
 enum Direction { Up, Down, Left, Right };
+enum GameState {
+    Exit,
+    StartGame,
+    GameOver,
+    ShowMenu,
+};
+struct Button {
+    Text self;
+    Color highlight_color;
+    GameState state;
+};
 std::mt19937 rng(std::random_device {}());
 
 Vector2i find_available_position(const deque<Vector2i>& snake_positions) {
@@ -364,8 +374,51 @@ bool load_system_font(Font& font) {
 
     return false;
 }
-bool should_start(Font& font) {
-    sf::RenderWindow window(
+// Returns true if user choose to play game
+GameState show_menu(RenderWindow& window, const Text& title, vector<Button>& buttons) {
+    while (window.isOpen()) {
+        while (const optional event = window.pollEvent()) {
+            if (event->is<Event::Closed>()) {
+                return Exit;
+            }
+            Vector2i mouse_position = sf::Mouse::getPosition(window);
+            Vector2f mouse_position_float(
+                static_cast<float>(mouse_position.x),
+                static_cast<float>(mouse_position.y)
+            );
+            if (const auto* mouse_pressed_event = event->getIf<Event::MouseButtonPressed>()) {
+                if (mouse_pressed_event->button == sf::Mouse::Button::Left) {
+                    for (auto& button: buttons) {
+                        if (button.self.getGlobalBounds().contains(mouse_position_float)) {
+                            return button.state;
+                        }
+                    }
+                }
+            }
+
+            for (auto& button: buttons) {
+                if (button.self.getGlobalBounds().contains(mouse_position_float)) {
+                    button.self.setFillColor(button.highlight_color);
+                    button.self.setScale({1.1f, 1.1f});
+                } else {
+                    button.self.setFillColor(Color::White);
+                    button.self.setScale({1.0f, 1.0f});
+                }
+            }
+        }
+        window.clear(Color::Transparent);
+        for (auto& button: buttons) {
+            window.draw(button.self);
+        }
+        window.draw(title);
+
+        // 显示
+        window.display();
+    }
+    return Exit;
+}
+GameState should_start(Font& font) {
+    RenderWindow window(
         sf::VideoMode(VideoMode::getDesktopMode().size),
         "Snake",
         State::Fullscreen
@@ -375,7 +428,7 @@ bool should_start(Font& font) {
     bool is_first_run = font.getInfo().family.empty();
     if (is_first_run) {
         if (!load_system_font(font)) {
-            return false;
+            return GameState::Exit;
         }
     }
 
@@ -402,14 +455,14 @@ bool should_start(Font& font) {
 
     const string START_BUTTON = "Start";
     const int32_t START_BUTTON_SIZE = 40;
-    const Color START_BUTTON_COLOR = Color::White;
+    const Color START_BUTTON_HIGHLIGHT_COLOR = Color::Green;
     const float START_BUTTON_X_FACTOR = 0.5;
     const float START_BUTTON_Y_FACTOR = 0.45;
     Text start_button = get_text(
         font,
         START_BUTTON,
         START_BUTTON_SIZE,
-        START_BUTTON_COLOR,
+        START_BUTTON_HIGHLIGHT_COLOR,
         window.getSize(),
         START_BUTTON_X_FACTOR,
         START_BUTTON_Y_FACTOR
@@ -417,69 +470,47 @@ bool should_start(Font& font) {
 
     const string EXIT_BUTTON = "Exit";
     const int32_t EXIT_BUTTON_SIZE = 40;
-    const Color EXIT_BUTTON_COLOR = Color::White;
+    const Color EXIT_BUTTON_HIGHLIGHT_COLOR = Color::Red;
     const float EXIT_BUTTON_X_FACTOR = 0.5;
     const float EXIT_BUTTON_Y_FACTOR = 0.55;
     Text exit_button = get_text(
         font,
         EXIT_BUTTON,
         EXIT_BUTTON_SIZE,
-        EXIT_BUTTON_COLOR,
+        EXIT_BUTTON_HIGHLIGHT_COLOR,
         window.getSize(),
         EXIT_BUTTON_X_FACTOR,
         EXIT_BUTTON_Y_FACTOR
     );
-    while (window.isOpen()) {
-        while (const optional event = window.pollEvent()) {
-            if (event->is<Event::Closed>()) {
+    vector<Button> buttons = {
+        {start_button, START_BUTTON_HIGHLIGHT_COLOR, GameState::StartGame},
+        {exit_button, EXIT_BUTTON_HIGHLIGHT_COLOR, GameState::Exit}
+    };
+    while (true) {
+        GameState current_state = show_menu(window, title_text, buttons);
+        switch (current_state) {
+            case GameState::StartGame: {
                 window.close();
-                return false;
+                return GameState::StartGame;
             }
-            Vector2i mouse_position = sf::Mouse::getPosition(window);
-            Vector2f mouse_position_float(
-                static_cast<float>(mouse_position.x),
-                static_cast<float>(mouse_position.y)
-            );
-            if (const auto* mouse_pressed_event = event->getIf<Event::MouseButtonPressed>()) {
-                if (mouse_pressed_event->button == sf::Mouse::Button::Left) {
-                    if (start_button.getGlobalBounds().contains(mouse_position_float)) {
-                        window.close();
-                        return true;
-                    }
-
-                    if (exit_button.getGlobalBounds().contains(mouse_position_float)) {
-                        window.close();
-                        return false;
-                    }
-                }
+            case GameState::Exit: {
+                window.close();
+                return GameState::Exit;
             }
-
-            if (start_button.getGlobalBounds().contains(mouse_position_float)) {
-                start_button.setFillColor(sf::Color::Green);
-                start_button.setScale({1.1f, 1.1f});
-            } else {
-                start_button.setFillColor(START_BUTTON_COLOR);
-                start_button.setScale({1.0f, 1.0f});
+            case GameState::GameOver: {
+                window.close();
+                std::cerr << "Unexpected state: GameOver" << std::endl;
+                return GameState::Exit;
+                break;
             }
-
-            if (exit_button.getGlobalBounds().contains(mouse_position_float)) {
-                exit_button.setFillColor(sf::Color::Red);
-                exit_button.setScale({1.1f, 1.1f});
-            } else {
-                exit_button.setFillColor(EXIT_BUTTON_COLOR);
-                exit_button.setScale({1.0f, 1.0f});
+            case GameState::ShowMenu: {
+                window.close();
+                std::cerr << "Unexpected state: ShowMenu" << std::endl;
+                return GameState::Exit;
+                break;
             }
         }
-        window.clear(Color::Transparent);
-
-        window.draw(start_button);
-        window.draw(exit_button);
-        window.draw(title_text);
-
-        // 显示
-        window.display();
     }
-    return false;
 }
 void write_temp_file(ofstream& temp_file) {
     const string SNAKE_BODY_SIZE_COMMENT = "# Optional values: small, medium, large";
@@ -518,8 +549,13 @@ void game_end() {
 int main() {
     Font font;
     game_start();
-    while (should_start(font)) {
-        game_main();
+    while (true) {
+        GameState state = should_start(font);
+        if (state == GameState::StartGame) {
+            game_main();
+        } else if (state == GameState::Exit) {
+            break;
+        }
     }
     game_end();
     return 0;
