@@ -490,6 +490,20 @@ Button get_exit_button(Font& font, Vector2u window_size) {
     exit_button.highlight_color = EXIT_BUTTON_HIGHLIGHT_COLOR;
     return exit_button;
 }
+Button get_return_button(Font& font, Vector2u window_size) {
+    const string RETURN_BUTTON = "Return";
+    const Color RETURN_BUTTON_HIGHLIGHT_COLOR = Color::Red;
+    const float RETURN_BUTTON_Y_FACTOR = 0.75;
+    Button return_button = get_normal_button(
+        font,
+        window_size,
+        RETURN_BUTTON,
+        RETURN_BUTTON_Y_FACTOR,
+        GameState::ShowMenu
+    );
+    return_button.highlight_color = RETURN_BUTTON_HIGHLIGHT_COLOR;
+    return return_button;
+}
 GameState
 handle_window_event(RenderWindow& window, const vector<Text>& texts, vector<Button>& buttons) {
     while (window.isOpen()) {
@@ -541,10 +555,16 @@ GameState show_about(Font& font, RenderWindow& window) {
     Text about_text = get_about_text(font, window.getSize());
     vector<Text> texts = {title_text, about_text};
 
-    Button exit_button = get_exit_button(font, window.getSize());
-    exit_button.return_state = GameState::ShowMenu;
-    exit_button.self.setString("Return");
-    vector<Button> buttons = {exit_button};
+    Button return_button = get_return_button(font, window.getSize());
+    vector<Button> buttons = {return_button};
+    return handle_window_event(window, texts, buttons);
+}
+GameState show_settings(Font& font, RenderWindow& window) {
+    Text title_text = get_title("Settings", font, window.getSize());
+    vector<Text> texts = {title_text};
+
+    Button return_button = get_return_button(font, window.getSize());
+    vector<Button> buttons = {return_button};
     return handle_window_event(window, texts, buttons);
 }
 GameState should_start(Font& font) {
@@ -564,23 +584,32 @@ GameState should_start(Font& font) {
 
     GameState current_state = GameState::ShowMenu;
     while (true) {
-        if (current_state == GameState::StartGame) {
-            window.close();
-            return GameState::StartGame;
-        } else if (current_state == GameState::ShowMenu) {
-            current_state = show_menu(font, window);
-        } else if (current_state == GameState::ShowSettings) {
-            // TODO
-            current_state = GameState::ShowMenu;
-        } else if (current_state == GameState::ShowAbout) {
-            current_state = show_about(font, window);
-        } else if (current_state == GameState::Exit) {
-            window.close();
-            return GameState::Exit;
-        } else {
-            window.close();
-            std::cerr << "Error: Invalid game state" << std::endl;
-            return GameState::Exit;
+        switch (current_state) {
+            case Exit: {
+                window.close();
+                return GameState::Exit;
+            }
+            case StartGame: {
+                window.close();
+                return GameState::StartGame;
+            }
+            case ShowMenu: {
+                current_state = show_menu(font, window);
+                break;
+            }
+            case ShowAbout: {
+                current_state = show_about(font, window);
+                break;
+            }
+            case ShowSettings: {
+                current_state = show_settings(font, window);
+                break;
+            }
+            default: {
+                window.close();
+                std::cerr << "Error: Invalid game state" << std::endl;
+                return GameState::Exit;
+            }
         }
     }
 }
