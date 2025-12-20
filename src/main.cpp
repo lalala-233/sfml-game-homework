@@ -41,6 +41,8 @@ enum GameState {
     StartGame,
     GameOver,
     ShowMenu,
+    ShowAbout,
+    ShowSettings,
 };
 struct Button {
     Text self;
@@ -374,7 +376,6 @@ bool load_system_font(Font& font) {
 
     return false;
 }
-// Returns true if user choose to play game
 GameState show_menu(RenderWindow& window, const Text& title, vector<Button>& buttons) {
     while (window.isOpen()) {
         while (const optional event = window.pollEvent()) {
@@ -406,7 +407,7 @@ GameState show_menu(RenderWindow& window, const Text& title, vector<Button>& but
                 }
             }
         }
-        window.clear(Color::Transparent);
+        window.clear(Color::Black);
         for (auto& button: buttons) {
             window.draw(button.self);
         }
@@ -416,6 +417,92 @@ GameState show_menu(RenderWindow& window, const Text& title, vector<Button>& but
         window.display();
     }
     return Exit;
+}
+Text get_title(Font& font, Vector2u window_size) {
+    const string TITLE_TEXT = "Snake";
+    const int32_t TITLE_TEXT_SIZE = 60;
+    const Color TITLE_TEXT_COLOR = Color::Yellow;
+    const float TITLE_TEXT_X_FACTOR = 0.5;
+    const float TITLE_TEXT_Y_FACTOR = 0.15;
+    Text title_text = get_text(
+        font,
+        TITLE_TEXT,
+        TITLE_TEXT_SIZE,
+        TITLE_TEXT_COLOR,
+        window_size,
+        TITLE_TEXT_X_FACTOR,
+        TITLE_TEXT_Y_FACTOR
+    );
+    title_text.setStyle(Text::Bold);
+    return title_text;
+}
+Button get_start_button(Font& font, Vector2u window_size) {
+    const string START_BUTTON = "Start";
+    const int32_t START_BUTTON_SIZE = 40;
+    const Color START_BUTTON_HIGHLIGHT_COLOR = Color::Green;
+    const float START_BUTTON_X_FACTOR = 0.5;
+    const float START_BUTTON_Y_FACTOR = 0.45;
+    Text start_button = get_text(
+        font,
+        START_BUTTON,
+        START_BUTTON_SIZE,
+        START_BUTTON_HIGHLIGHT_COLOR,
+        window_size,
+        START_BUTTON_X_FACTOR,
+        START_BUTTON_Y_FACTOR
+    );
+    return {start_button, START_BUTTON_HIGHLIGHT_COLOR, GameState::StartGame};
+}
+Button get_settings_button(Font& font, Vector2u window_size) {
+    const string SETTINGS_BUTTON = "Settings";
+    const int32_t SETTINGS_BUTTON_SIZE = 40;
+    const Color SETTINGS_BUTTON_HIGHLIGHT_COLOR = Color::Green;
+    const float SETTINGS_BUTTON_X_FACTOR = 0.5;
+    const float SETTINGS_BUTTON_Y_FACTOR = 0.55;
+    Text settings_button = get_text(
+        font,
+        SETTINGS_BUTTON,
+        SETTINGS_BUTTON_SIZE,
+        SETTINGS_BUTTON_HIGHLIGHT_COLOR,
+        window_size,
+        SETTINGS_BUTTON_X_FACTOR,
+        SETTINGS_BUTTON_Y_FACTOR
+    );
+    return {settings_button, SETTINGS_BUTTON_HIGHLIGHT_COLOR, GameState::ShowSettings};
+}
+Button get_about_button(Font& font, Vector2u window_size) {
+    const string ABOUT_BUTTON = "About";
+    const int32_t ABOUT_BUTTON_SIZE = 40;
+    const Color ABOUT_BUTTON_HIGHLIGHT_COLOR = Color::Green;
+    const float ABOUT_BUTTON_X_FACTOR = 0.5;
+    const float ABOUT_BUTTON_Y_FACTOR = 0.65;
+    Text about_button = get_text(
+        font,
+        ABOUT_BUTTON,
+        ABOUT_BUTTON_SIZE,
+        ABOUT_BUTTON_HIGHLIGHT_COLOR,
+        window_size,
+        ABOUT_BUTTON_X_FACTOR,
+        ABOUT_BUTTON_Y_FACTOR
+    );
+    return {about_button, ABOUT_BUTTON_HIGHLIGHT_COLOR, GameState::ShowAbout};
+}
+Button get_exit_button(Font& font, Vector2u window_size) {
+    const string EXIT_BUTTON = "Exit";
+    const int32_t EXIT_BUTTON_SIZE = 40;
+    const Color EXIT_BUTTON_HIGHLIGHT_COLOR = Color::Red;
+    const float EXIT_BUTTON_X_FACTOR = 0.5;
+    const float EXIT_BUTTON_Y_FACTOR = 0.75;
+    Text exit_button = get_text(
+        font,
+        EXIT_BUTTON,
+        EXIT_BUTTON_SIZE,
+        EXIT_BUTTON_HIGHLIGHT_COLOR,
+        window_size,
+        EXIT_BUTTON_X_FACTOR,
+        EXIT_BUTTON_Y_FACTOR
+    );
+    return {exit_button, EXIT_BUTTON_HIGHLIGHT_COLOR, GameState::Exit};
 }
 GameState should_start(Font& font) {
     RenderWindow window(
@@ -432,83 +519,30 @@ GameState should_start(Font& font) {
         }
     }
 
-    string TITLE_TEXT;
-    if (is_first_run) {
-        TITLE_TEXT = "Snake";
-    } else {
-        TITLE_TEXT = "You Lose!";
-    }
-    const int32_t TITLE_TEXT_SIZE = 60;
-    const Color TITLE_TEXT_COLOR = Color::Yellow;
-    const float TITLE_TEXT_X_FACTOR = 0.5;
-    const float TITLE_TEXT_Y_FACTOR = 0.15;
-    Text title_text = get_text(
-        font,
-        TITLE_TEXT,
-        TITLE_TEXT_SIZE,
-        TITLE_TEXT_COLOR,
-        window.getSize(),
-        TITLE_TEXT_X_FACTOR,
-        TITLE_TEXT_Y_FACTOR
-    );
-    title_text.setStyle(Text::Bold);
-
-    const string START_BUTTON = "Start";
-    const int32_t START_BUTTON_SIZE = 40;
-    const Color START_BUTTON_HIGHLIGHT_COLOR = Color::Green;
-    const float START_BUTTON_X_FACTOR = 0.5;
-    const float START_BUTTON_Y_FACTOR = 0.45;
-    Text start_button = get_text(
-        font,
-        START_BUTTON,
-        START_BUTTON_SIZE,
-        START_BUTTON_HIGHLIGHT_COLOR,
-        window.getSize(),
-        START_BUTTON_X_FACTOR,
-        START_BUTTON_Y_FACTOR
-    );
-
-    const string EXIT_BUTTON = "Exit";
-    const int32_t EXIT_BUTTON_SIZE = 40;
-    const Color EXIT_BUTTON_HIGHLIGHT_COLOR = Color::Red;
-    const float EXIT_BUTTON_X_FACTOR = 0.5;
-    const float EXIT_BUTTON_Y_FACTOR = 0.55;
-    Text exit_button = get_text(
-        font,
-        EXIT_BUTTON,
-        EXIT_BUTTON_SIZE,
-        EXIT_BUTTON_HIGHLIGHT_COLOR,
-        window.getSize(),
-        EXIT_BUTTON_X_FACTOR,
-        EXIT_BUTTON_Y_FACTOR
-    );
-    vector<Button> buttons = {
-        {start_button, START_BUTTON_HIGHLIGHT_COLOR, GameState::StartGame},
-        {exit_button, EXIT_BUTTON_HIGHLIGHT_COLOR, GameState::Exit}
-    };
+    Text title_text = get_title(font, window.getSize());
+    Button start_button = get_start_button(font, window.getSize());
+    Button settings_button = get_settings_button(font, window.getSize());
+    Button about_button = get_about_button(font, window.getSize());
+    Button exit_button = get_exit_button(font, window.getSize());
+    vector<Button> menu_buttons = {start_button, settings_button, about_button, exit_button};
+    GameState current_state = GameState::ShowMenu;
     while (true) {
-        GameState current_state = show_menu(window, title_text, buttons);
-        switch (current_state) {
-            case GameState::StartGame: {
-                window.close();
-                return GameState::StartGame;
-            }
-            case GameState::Exit: {
-                window.close();
-                return GameState::Exit;
-            }
-            case GameState::GameOver: {
-                window.close();
-                std::cerr << "Unexpected state: GameOver" << std::endl;
-                return GameState::Exit;
-                break;
-            }
-            case GameState::ShowMenu: {
-                window.close();
-                std::cerr << "Unexpected state: ShowMenu" << std::endl;
-                return GameState::Exit;
-                break;
-            }
+        if (current_state == GameState::StartGame) {
+            window.close();
+            return GameState::StartGame;
+        } else if (current_state == GameState::ShowMenu) {
+            current_state = show_menu(window, title_text, menu_buttons);
+        } else if (current_state == GameState::ShowSettings) {
+            // TODO
+        } else if (current_state == GameState::ShowAbout) {
+            // TODO
+        } else if (current_state == GameState::Exit) {
+            window.close();
+            return GameState::Exit;
+        } else {
+            window.close();
+            std::cerr << "Error: Invalid game state" << std::endl;
+            return GameState::Exit;
         }
     }
 }
