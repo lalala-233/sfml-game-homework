@@ -46,9 +46,18 @@ enum GameState {
     ShowSettings,
 };
 struct Button {
-    Text self;
+    Text text;
     Color highlight_color;
+};
+struct ClickButton {
+    Button button;
     GameState return_state;
+};
+struct SelectButtons {
+    string settings_name;
+    Text text;
+    vector<Button> buttons;
+    int32_t selected_button;
 };
 std::mt19937 rng(std::random_device {}());
 
@@ -187,7 +196,7 @@ void update(
     }
     snake_positions.push_front(new_position);
 
-    for (int i = 0; i < windows.size(); i++) {
+    for (int32_t i = 0; i < windows.size(); i++) {
         windows[i]->setPosition(snake_positions[i]);
     }
 
@@ -300,22 +309,26 @@ map<string, string> read_config(const string& filename) {
     }
     return config;
 }
-void game_start() {
-    config = read_config(CONFIG_NAME);
+void reload_config() {
     auto snake_body_size = config["snake_body_size"];
+    WINDOW_SIZE = 240;
     if (!snake_body_size.empty()) {
-        if (snake_body_size == "\"small\"") {
+        if (snake_body_size == "small") {
             WINDOW_SIZE = 180;
-        } else if (snake_body_size == "\"large\"") {
+        } else if (snake_body_size == "large") {
             WINDOW_SIZE = 360;
-        } else {
-            WINDOW_SIZE = 240;
         }
+    } else {
+        snake_body_size = "medium";
     }
     DESKTOP_SIZE_X = VideoMode::getDesktopMode().size.x / WINDOW_SIZE * WINDOW_SIZE;
     DESKTOP_SIZE_Y = VideoMode::getDesktopMode().size.y / WINDOW_SIZE * WINDOW_SIZE;
     std::cout << "window_size: " << WINDOW_SIZE << 'x' << WINDOW_SIZE << std::endl;
     std::cout << "desktop_size: " << DESKTOP_SIZE_X << 'x' << DESKTOP_SIZE_Y << std::endl;
+}
+void game_start() {
+    config = read_config(CONFIG_NAME);
+    reload_config();
 }
 Text get_text(
     const Font& font,
@@ -367,7 +380,7 @@ bool load_system_font(Font& font) {
         nullptr
     };
 #endif
-    for (int i = 0; fontPaths[i]; i++) {
+    for (int32_t i = 0; fontPaths[i]; i++) {
         if (font.openFromFile(fontPaths[i])) {
             return true;
         }
@@ -375,32 +388,64 @@ bool load_system_font(Font& font) {
 
     return false;
 }
+void update_setting(const SelectButtons& select_buttons) {
+    const Button& selected_button = select_buttons.buttons[select_buttons.selected_button];
+    string value = selected_button.text.getString();
+    value[0] = tolower(value[0]);
+    config[select_buttons.settings_name] = value;
+    
+    reload_config();
+}
 optional<GameState> handle_click(
     const Event::MouseButtonPressed* mouse_pressed_event,
-    vector<Button>& buttons,
+    vector<ClickButton>& buttons,
     Vector2f mouse_position_float
 ) {
     if (mouse_pressed_event->button == sf::Mouse::Button::Left) {
-        for (auto& button: buttons) {
-            if (button.self.getGlobalBounds().contains(mouse_position_float)) {
-                return button.return_state;
+        for (auto& click_button: buttons) {
+            if (click_button.button.text.getGlobalBounds().contains(mouse_position_float)) {
+                return click_button.return_state;
             }
         }
     }
     return nullopt;
 }
-void handle_hover(vector<Button>& buttons, Vector2f mouse_position_float) {
-    for (auto& button: buttons) {
-        if (button.self.getGlobalBounds().contains(mouse_position_float)) {
-            button.self.setFillColor(button.highlight_color);
-            button.self.setScale({1.1f, 1.1f});
-        } else {
-            button.self.setFillColor(Color::White);
-            button.self.setScale({1.0f, 1.0f});
+void handle_click(
+    const Event::MouseButtonPressed* mouse_pressed_event,
+    SelectButtons& select_buttons,
+    Vector2f mouse_position_float
+) {
+    if (mouse_pressed_event->button == sf::Mouse::Button::Left) {
+        for (int32_t i = 0; i < select_buttons.buttons.size(); i++) {
+            if (select_buttons.buttons[i].text.getGlobalBounds().contains(mouse_position_float)) {
+                select_buttons.selected_button = i;
+                update_setting(select_buttons);
+            }
         }
     }
 }
-
+void handle_hover(Button& button, Vector2f mouse_position_float) {
+    if (button.text.getGlobalBounds().contains(mouse_position_float)) {
+        button.text.setFillColor(button.highlight_color);
+        button.text.setScale({1.1f, 1.1f});
+    } else {
+        button.text.setFillColor(Color::White);
+        button.text.setScale({1.0f, 1.0f});
+    }
+}
+void handle_hover(SelectButtons& select_button, Vector2f mouse_position_float) {
+    for (auto& button: select_button.buttons) {
+        handle_hover(button, mouse_position_float);
+    }
+    Button& selected_button = select_button.buttons[select_button.selected_button];
+    selected_button.text.setFillColor(selected_button.highlight_color);
+    selected_button.text.setScale({1.1f, 1.1f});
+}
+void handle_hover(vector<ClickButton>& buttons, Vector2f mouse_position_float) {
+    for (auto& button: buttons) {
+        handle_hover(button.button, mouse_position_float);
+    }
+}
 Text get_title(string text, Font& font, Vector2u window_size) {
     const int32_t TITLE_TEXT_SIZE = 60;
     const Color TITLE_TEXT_COLOR = Color::Yellow;
@@ -435,62 +480,42 @@ Text get_about_text(Font& font, Vector2u window_size) {
         ABOUT_TEXT_Y_FACTOR
     );
 }
-Button get_normal_button(
-    Font& font,
-    Vector2u window_size,
-    const string& text,
-    float y_factor,
-    GameState state
-) {
+Button get_normal_button(Font& font, Vector2u window_size, const string& text, float y_factor) {
     const int32_t BUTTON_SIZE = 40;
     const Color BUTTON_HIGHLIGHT_COLOR = Color::Green;
     const float BUTTON_X_FACTOR = 0.5;
     Text button = get_text(font, text, BUTTON_SIZE, window_size, BUTTON_X_FACTOR, y_factor);
-    return {button, BUTTON_HIGHLIGHT_COLOR, state};
+    return {button, BUTTON_HIGHLIGHT_COLOR};
 }
-Button get_start_button(Font& font, Vector2u window_size) {
+ClickButton get_start_button(Font& font, Vector2u window_size) {
     const string START_BUTTON_TEXT = "Start";
     const float START_BUTTON_Y_FACTOR = 0.45;
-    return get_normal_button(
-        font,
-        window_size,
-        START_BUTTON_TEXT,
-        START_BUTTON_Y_FACTOR,
-        GameState::StartGame
-    );
+    Button start_button =
+        get_normal_button(font, window_size, START_BUTTON_TEXT, START_BUTTON_Y_FACTOR);
+    return {start_button, GameState::StartGame};
 }
-Button get_settings_button(Font& font, Vector2u window_size) {
+ClickButton get_settings_button(Font& font, Vector2u window_size) {
     const string SETTINGS_BUTTON_TEXT = "Settings";
     const float SETTINGS_BUTTON_Y_FACTOR = 0.55;
-    return get_normal_button(
-        font,
-        window_size,
-        SETTINGS_BUTTON_TEXT,
-        SETTINGS_BUTTON_Y_FACTOR,
-        GameState::ShowSettings
-    );
+    Button setting_button =
+        get_normal_button(font, window_size, SETTINGS_BUTTON_TEXT, SETTINGS_BUTTON_Y_FACTOR);
+    return {setting_button, GameState::ShowSettings};
 }
-Button get_about_button(Font& font, Vector2u window_size) {
+ClickButton get_about_button(Font& font, Vector2u window_size) {
     const string ABOUT_BUTTON = "About";
     const float ABOUT_BUTTON_Y_FACTOR = 0.65;
-    return get_normal_button(
-        font,
-        window_size,
-        ABOUT_BUTTON,
-        ABOUT_BUTTON_Y_FACTOR,
-        GameState::ShowAbout
-    );
+    Button about_button = get_normal_button(font, window_size, ABOUT_BUTTON, ABOUT_BUTTON_Y_FACTOR);
+    return {about_button, GameState::ShowAbout};
 }
-Button get_exit_button(Font& font, Vector2u window_size) {
+ClickButton get_exit_button(Font& font, Vector2u window_size) {
     const string EXIT_BUTTON = "Exit";
     const Color EXIT_BUTTON_HIGHLIGHT_COLOR = Color::Red;
     const float EXIT_BUTTON_Y_FACTOR = 0.75;
-    Button exit_button =
-        get_normal_button(font, window_size, EXIT_BUTTON, EXIT_BUTTON_Y_FACTOR, GameState::Exit);
+    Button exit_button = get_normal_button(font, window_size, EXIT_BUTTON, EXIT_BUTTON_Y_FACTOR);
     exit_button.highlight_color = EXIT_BUTTON_HIGHLIGHT_COLOR;
-    return exit_button;
+    return {exit_button, GameState::Exit};
 }
-Button get_return_button(Font& font, Vector2u window_size) {
+ClickButton get_return_button(Font& font, Vector2u window_size) {
     const string RETURN_BUTTON = "Return";
     const Color RETURN_BUTTON_HIGHLIGHT_COLOR = Color::Red;
     const float RETURN_BUTTON_Y_FACTOR = 0.75;
@@ -498,14 +523,60 @@ Button get_return_button(Font& font, Vector2u window_size) {
         font,
         window_size,
         RETURN_BUTTON,
-        RETURN_BUTTON_Y_FACTOR,
-        GameState::ShowMenu
+        RETURN_BUTTON_Y_FACTOR
+
     );
     return_button.highlight_color = RETURN_BUTTON_HIGHLIGHT_COLOR;
-    return return_button;
+    return {return_button, GameState::ShowMenu};
+}
+SelectButtons get_snake_size_button(Font& font, Vector2u window_size) {
+    const string SNAKE_BODY_SIZE_TEXT = "Snake Size";
+    const float SNAKE_BODY_SIZE_TEXT_SIZE = 40;
+    const float SNAKE_BODY_SIZE_TEXT_X_FACTOR = 0.5;
+    const float SNAKE_BODY_SIZE_TEXT_Y_FACTOR = 0.25;
+    Text snake_body_size_text = get_text(
+        font,
+        SNAKE_BODY_SIZE_TEXT,
+        SNAKE_BODY_SIZE_TEXT_SIZE,
+        window_size,
+        SNAKE_BODY_SIZE_TEXT_X_FACTOR,
+        SNAKE_BODY_SIZE_TEXT_Y_FACTOR
+    );
+
+    string SNAKE_BODY_SIZE_BUTTON[3] = {"Small", "Medium", "Large"};
+    const float SNAKE_BODY_SIZE_BUTTON_SIZE = 40;
+    const Color SNAKE_BODY_SIZE_BUTTON_HIGHLIGHT_COLOR = Color::Green;
+    const float SNAKE_BODY_SIZE_BUTTON_X_FACTOR = 0.25;
+    const float SNAKE_BODY_SIZE_BUTTON_Y_FACTOR = 0.35;
+    vector<Button> snake_body_size_buttons;
+    const string& SNAKE_BODY_SIZE_BUTTON_SETTINGS_NAME = "snake_body_size";
+    const string& snake_body_size = config[SNAKE_BODY_SIZE_BUTTON_SETTINGS_NAME];
+    // Default is 1, which is medium
+    int32_t selected_button = 1;
+    for (int32_t i = 0; i < 3; i++) {
+        Text text = get_text(
+            font,
+            SNAKE_BODY_SIZE_BUTTON[i],
+            SNAKE_BODY_SIZE_BUTTON_SIZE,
+            window_size,
+            SNAKE_BODY_SIZE_BUTTON_X_FACTOR * (i + 1),
+            SNAKE_BODY_SIZE_BUTTON_Y_FACTOR
+        );
+        snake_body_size_buttons.push_back({text, SNAKE_BODY_SIZE_BUTTON_HIGHLIGHT_COLOR});
+        SNAKE_BODY_SIZE_BUTTON[i][0] = tolower(SNAKE_BODY_SIZE_BUTTON[i][0]);
+        if (snake_body_size == SNAKE_BODY_SIZE_BUTTON[i]) {
+            selected_button = i;
+        }
+    }
+    return {
+        SNAKE_BODY_SIZE_BUTTON_SETTINGS_NAME,
+        snake_body_size_text,
+        snake_body_size_buttons,
+        selected_button
+    };
 }
 GameState
-handle_window_event(RenderWindow& window, const vector<Text>& texts, vector<Button>& buttons) {
+handle_window_event(RenderWindow& window, const vector<Text>& texts, vector<ClickButton>& buttons) {
     while (window.isOpen()) {
         while (const optional event = window.pollEvent()) {
             if (event->is<Event::Closed>()) {
@@ -526,8 +597,8 @@ handle_window_event(RenderWindow& window, const vector<Text>& texts, vector<Butt
             handle_hover(buttons, mouse_position_float);
         }
         window.clear(Color::Black);
-        for (auto& button: buttons) {
-            window.draw(button.self);
+        for (auto& click_button: buttons) {
+            window.draw(click_button.button.text);
         }
         for (auto text: texts) {
             window.draw(text);
@@ -543,11 +614,11 @@ GameState show_menu(Font& font, RenderWindow& window) {
         title_text,
     };
 
-    Button start_button = get_start_button(font, window.getSize());
-    Button settings_button = get_settings_button(font, window.getSize());
-    Button about_button = get_about_button(font, window.getSize());
-    Button exit_button = get_exit_button(font, window.getSize());
-    vector<Button> buttons = {start_button, settings_button, about_button, exit_button};
+    ClickButton start_button = get_start_button(font, window.getSize());
+    ClickButton settings_button = get_settings_button(font, window.getSize());
+    ClickButton about_button = get_about_button(font, window.getSize());
+    ClickButton exit_button = get_exit_button(font, window.getSize());
+    vector<ClickButton> buttons = {start_button, settings_button, about_button, exit_button};
     return handle_window_event(window, texts, buttons);
 }
 GameState show_about(Font& font, RenderWindow& window) {
@@ -555,17 +626,53 @@ GameState show_about(Font& font, RenderWindow& window) {
     Text about_text = get_about_text(font, window.getSize());
     vector<Text> texts = {title_text, about_text};
 
-    Button return_button = get_return_button(font, window.getSize());
-    vector<Button> buttons = {return_button};
+    ClickButton return_button = get_return_button(font, window.getSize());
+    vector<ClickButton> buttons = {return_button};
     return handle_window_event(window, texts, buttons);
 }
 GameState show_settings(Font& font, RenderWindow& window) {
     Text title_text = get_title("Settings", font, window.getSize());
     vector<Text> texts = {title_text};
 
-    Button return_button = get_return_button(font, window.getSize());
-    vector<Button> buttons = {return_button};
-    return handle_window_event(window, texts, buttons);
+    ClickButton return_button = get_return_button(font, window.getSize());
+    SelectButtons snake_size_button = get_snake_size_button(font, window.getSize());
+    vector<ClickButton> click_buttons = {return_button};
+    while (window.isOpen()) {
+        while (const optional event = window.pollEvent()) {
+            if (event->is<Event::Closed>()) {
+                return GameState::Exit;
+            }
+            Vector2i mouse_position = sf::Mouse::getPosition(window);
+            Vector2f mouse_position_float(
+                static_cast<float>(mouse_position.x),
+                static_cast<float>(mouse_position.y)
+            );
+            if (const auto* mouse_pressed_event = event->getIf<Event::MouseButtonPressed>()) {
+                if (optional state =
+                        handle_click(mouse_pressed_event, click_buttons, mouse_position_float))
+                {
+                    return *state;
+                }
+                handle_click(mouse_pressed_event, snake_size_button, mouse_position_float);
+            }
+            handle_hover(click_buttons, mouse_position_float);
+            handle_hover(snake_size_button, mouse_position_float);
+        }
+        window.clear(Color::Black);
+        for (auto& click_button: click_buttons) {
+            window.draw(click_button.button.text);
+        }
+        for (auto& button: snake_size_button.buttons) {
+            window.draw(button.text);
+        }
+        window.draw(snake_size_button.text);
+        for (auto text: texts) {
+            window.draw(text);
+        }
+
+        window.display();
+    }
+    return GameState::Exit;
 }
 GameState should_start(Font& font) {
     RenderWindow window(
@@ -617,7 +724,7 @@ void write_temp_file(ofstream& temp_file) {
     const string SNAKE_BODY_SIZE_COMMENT = "# Optional values: small, medium, large";
     string snake_body_size = config["snake_body_size"];
     if (snake_body_size.empty()) {
-        snake_body_size = "\"medium\"";
+        snake_body_size = "medium";
     }
     temp_file << SNAKE_BODY_SIZE_COMMENT << std::endl;
     temp_file << "snake_body_size=" << snake_body_size << std::endl;
@@ -647,7 +754,7 @@ void game_end() {
         std::filesystem::remove(BACKUP_FILE);
     }
 }
-int main() {
+int32_t main() {
     Font font;
     game_start();
     while (true) {
