@@ -39,11 +39,12 @@ const milliseconds SLEEP_TIME(500);
 enum Direction { Up, Down, Left, Right };
 enum GameState {
     Exit,
-    StartGame,
     GameOver,
     ShowMenu,
     ShowAbout,
     ShowSettings,
+    StartGame,
+    Win,
 };
 struct Button {
     Text text;
@@ -264,7 +265,8 @@ bool try_update_current_direction(
     }
     return false;
 }
-void game_main() {
+GameState game_main() {
+    const int32_t win_condition = (DESKTOP_SIZE_X / WINDOW_SIZE) * (DESKTOP_SIZE_Y / WINDOW_SIZE);
     bool is_game_running = true;
     Direction current_direction = Right;
     deque<Vector2i> snake_positions;
@@ -274,6 +276,9 @@ void game_main() {
     spawn_food(food, snake_positions);
     auto now = std::chrono::steady_clock::now();
     while (is_game_running) {
+        if (snake_positions.size() >= win_condition) {
+            break;
+        }
         if (std::chrono::steady_clock::now() - now > SLEEP_TIME) {
             update(is_game_running, windows, snake_positions, food, current_direction);
             now = std::chrono::steady_clock::now();
@@ -288,12 +293,16 @@ void game_main() {
     for (auto& window: windows) {
         window->close();
     }
+    if (is_game_running) {
+        return Win;
+    } else {
+        return GameOver;
+    }
 }
-map<string, string> read_config(const string& filename) {
+void read_config(const string& filename) {
     ifstream file(filename);
-    map<string, string> config;
     if (!file.is_open()) {
-        return config;
+        return;
     }
     string line;
     while (getline(file, line)) {
@@ -307,7 +316,6 @@ map<string, string> read_config(const string& filename) {
             config[key] = value;
         }
     }
-    return config;
 }
 void reload_config() {
     auto snake_body_size = config["snake_body_size"];
@@ -327,7 +335,7 @@ void reload_config() {
     std::cout << "desktop_size: " << DESKTOP_SIZE_X << 'x' << DESKTOP_SIZE_Y << std::endl;
 }
 void game_start() {
-    config = read_config(CONFIG_NAME);
+    read_config(CONFIG_NAME);
     reload_config();
 }
 Text get_text(
@@ -381,7 +389,7 @@ bool load_system_font(Font& font) {
     };
 #endif
     for (int32_t i = 0; fontPaths[i]; i++) {
-        if (font.openFromFile(fontPaths[i])) {
+        if (std::filesystem::exists(fontPaths[i]) && font.openFromFile(fontPaths[i])) {
             return true;
         }
     }
@@ -393,7 +401,7 @@ void update_setting(const SelectButtons& select_buttons) {
     string value = selected_button.text.getString();
     value[0] = tolower(value[0]);
     config[select_buttons.settings_name] = value;
-    
+
     reload_config();
 }
 optional<GameState> handle_click(
@@ -494,6 +502,13 @@ ClickButton get_start_button(Font& font, Vector2u window_size) {
         get_normal_button(font, window_size, START_BUTTON_TEXT, START_BUTTON_Y_FACTOR);
     return {start_button, GameState::StartGame};
 }
+ClickButton get_try_again_button(Font& font, Vector2u window_size) {
+    const string START_BUTTON_TEXT = "Try Again";
+    const float START_BUTTON_Y_FACTOR = 0.45;
+    Button start_button =
+        get_normal_button(font, window_size, START_BUTTON_TEXT, START_BUTTON_Y_FACTOR);
+    return {start_button, GameState::StartGame};
+}
 ClickButton get_settings_button(Font& font, Vector2u window_size) {
     const string SETTINGS_BUTTON_TEXT = "Settings";
     const float SETTINGS_BUTTON_Y_FACTOR = 0.55;
@@ -575,8 +590,12 @@ SelectButtons get_snake_size_button(Font& font, Vector2u window_size) {
         selected_button
     };
 }
-GameState
-handle_window_event(RenderWindow& window, const vector<Text>& texts, vector<ClickButton>& buttons) {
+GameState handle_window_event(
+    RenderWindow& window,
+    const vector<Text>& texts,
+    vector<ClickButton>& buttons,
+    vector<SelectButtons> select_buttons = {}
+) {
     while (window.isOpen()) {
         while (const optional event = window.pollEvent()) {
             if (event->is<Event::Closed>()) {
@@ -593,12 +612,24 @@ handle_window_event(RenderWindow& window, const vector<Text>& texts, vector<Clic
                 {
                     return *state;
                 }
+                for (auto& select_button: select_buttons) {
+                    handle_click(mouse_pressed_event, select_button, mouse_position_float);
+                }
             }
             handle_hover(buttons, mouse_position_float);
+            for (auto& select_button: select_buttons) {
+                handle_hover(select_button, mouse_position_float);
+            }
         }
         window.clear(Color::Black);
         for (auto& click_button: buttons) {
             window.draw(click_button.button.text);
+        }
+        for (auto& select_button: select_buttons) {
+            window.draw(select_button.text);
+            for (auto& button: select_button.buttons) {
+                window.draw(button.text);
+            }
         }
         for (auto text: texts) {
             window.draw(text);
@@ -630,51 +661,44 @@ GameState show_about(Font& font, RenderWindow& window) {
     vector<ClickButton> buttons = {return_button};
     return handle_window_event(window, texts, buttons);
 }
-GameState show_settings(Font& font, RenderWindow& window) {
+GameState show_settings(Font& font, RenderWindow& window, GameState last_state) {
     Text title_text = get_title("Settings", font, window.getSize());
     vector<Text> texts = {title_text};
 
     ClickButton return_button = get_return_button(font, window.getSize());
-    SelectButtons snake_size_button = get_snake_size_button(font, window.getSize());
+    return_button.return_state = last_state;
     vector<ClickButton> click_buttons = {return_button};
-    while (window.isOpen()) {
-        while (const optional event = window.pollEvent()) {
-            if (event->is<Event::Closed>()) {
-                return GameState::Exit;
-            }
-            Vector2i mouse_position = sf::Mouse::getPosition(window);
-            Vector2f mouse_position_float(
-                static_cast<float>(mouse_position.x),
-                static_cast<float>(mouse_position.y)
-            );
-            if (const auto* mouse_pressed_event = event->getIf<Event::MouseButtonPressed>()) {
-                if (optional state =
-                        handle_click(mouse_pressed_event, click_buttons, mouse_position_float))
-                {
-                    return *state;
-                }
-                handle_click(mouse_pressed_event, snake_size_button, mouse_position_float);
-            }
-            handle_hover(click_buttons, mouse_position_float);
-            handle_hover(snake_size_button, mouse_position_float);
-        }
-        window.clear(Color::Black);
-        for (auto& click_button: click_buttons) {
-            window.draw(click_button.button.text);
-        }
-        for (auto& button: snake_size_button.buttons) {
-            window.draw(button.text);
-        }
-        window.draw(snake_size_button.text);
-        for (auto text: texts) {
-            window.draw(text);
-        }
 
-        window.display();
-    }
-    return GameState::Exit;
+    SelectButtons snake_size_button = get_snake_size_button(font, window.getSize());
+    vector<SelectButtons> select_buttons = {snake_size_button};
+
+    return handle_window_event(window, texts, click_buttons, select_buttons);
 }
-GameState should_start(Font& font) {
+GameState show_game_over(Font& font, RenderWindow& window) {
+    Text title_text = get_title("Game Over", font, window.getSize());
+    vector<Text> texts = {
+        title_text,
+    };
+
+    ClickButton try_again_button = get_try_again_button(font, window.getSize());
+    ClickButton settings_button = get_settings_button(font, window.getSize());
+    ClickButton exit_button = get_exit_button(font, window.getSize());
+    vector<ClickButton> buttons = {try_again_button, settings_button, exit_button};
+    return handle_window_event(window, texts, buttons);
+}
+GameState show_win(Font& font, RenderWindow& window) {
+    Text title_text = get_title("You Win!", font, window.getSize());
+    vector<Text> texts = {
+        title_text,
+    };
+
+    ClickButton try_again_button = get_try_again_button(font, window.getSize());
+    ClickButton settings_button = get_settings_button(font, window.getSize());
+    ClickButton exit_button = get_exit_button(font, window.getSize());
+    vector<ClickButton> buttons = {try_again_button, settings_button, exit_button};
+    return handle_window_event(window, texts, buttons);
+}
+GameState should_start(Font& font, GameState current_state) {
     RenderWindow window(
         sf::VideoMode(VideoMode::getDesktopMode().size),
         "Snake",
@@ -689,7 +713,7 @@ GameState should_start(Font& font) {
         }
     }
 
-    GameState current_state = GameState::ShowMenu;
+    GameState last_state = current_state;
     while (true) {
         switch (current_state) {
             case Exit: {
@@ -702,14 +726,27 @@ GameState should_start(Font& font) {
             }
             case ShowMenu: {
                 current_state = show_menu(font, window);
+                last_state = GameState::ShowMenu;
                 break;
             }
             case ShowAbout: {
                 current_state = show_about(font, window);
+                last_state = GameState::ShowAbout;
                 break;
             }
             case ShowSettings: {
-                current_state = show_settings(font, window);
+                current_state = show_settings(font, window, last_state);
+                last_state = GameState::ShowSettings;
+                break;
+            }
+            case GameOver: {
+                current_state = show_game_over(font, window);
+                last_state = GameState::GameOver;
+                break;
+            }
+            case Win: {
+                current_state = show_win(font, window);
+                last_state = GameState::Win;
                 break;
             }
             default: {
@@ -757,10 +794,11 @@ void game_end() {
 int32_t main() {
     Font font;
     game_start();
+    GameState state = GameState::ShowMenu;
     while (true) {
-        GameState state = should_start(font);
+        state = should_start(font, state);
         if (state == GameState::StartGame) {
-            game_main();
+            state = game_main();
         } else if (state == GameState::Exit) {
             break;
         }
