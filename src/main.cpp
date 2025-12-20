@@ -20,6 +20,7 @@ using sf::Keyboard::Scancode;
 using std::deque;
 using std::ifstream;
 using std::map;
+using std::nullopt;
 using std::ofstream;
 using std::optional;
 using std::string;
@@ -376,48 +377,32 @@ bool load_system_font(Font& font) {
 
     return false;
 }
-GameState show_menu(RenderWindow& window, const Text& title, vector<Button>& buttons) {
-    while (window.isOpen()) {
-        while (const optional event = window.pollEvent()) {
-            if (event->is<Event::Closed>()) {
-                return Exit;
-            }
-            Vector2i mouse_position = sf::Mouse::getPosition(window);
-            Vector2f mouse_position_float(
-                static_cast<float>(mouse_position.x),
-                static_cast<float>(mouse_position.y)
-            );
-            if (const auto* mouse_pressed_event = event->getIf<Event::MouseButtonPressed>()) {
-                if (mouse_pressed_event->button == sf::Mouse::Button::Left) {
-                    for (auto& button: buttons) {
-                        if (button.self.getGlobalBounds().contains(mouse_position_float)) {
-                            return button.state;
-                        }
-                    }
-                }
-            }
-
-            for (auto& button: buttons) {
-                if (button.self.getGlobalBounds().contains(mouse_position_float)) {
-                    button.self.setFillColor(button.highlight_color);
-                    button.self.setScale({1.1f, 1.1f});
-                } else {
-                    button.self.setFillColor(Color::White);
-                    button.self.setScale({1.0f, 1.0f});
-                }
-            }
-        }
-        window.clear(Color::Black);
+optional<GameState> handle_click(
+    const Event::MouseButtonPressed* mouse_pressed_event,
+    vector<Button>& buttons,
+    Vector2f mouse_position_float
+) {
+    if (mouse_pressed_event->button == sf::Mouse::Button::Left) {
         for (auto& button: buttons) {
-            window.draw(button.self);
+            if (button.self.getGlobalBounds().contains(mouse_position_float)) {
+                return button.state;
+            }
         }
-        window.draw(title);
-
-        // 显示
-        window.display();
     }
-    return Exit;
+    return nullopt;
 }
+void handle_hover(vector<Button>& buttons, Vector2f mouse_position_float) {
+    for (auto& button: buttons) {
+        if (button.self.getGlobalBounds().contains(mouse_position_float)) {
+            button.self.setFillColor(button.highlight_color);
+            button.self.setScale({1.1f, 1.1f});
+        } else {
+            button.self.setFillColor(Color::White);
+            button.self.setScale({1.0f, 1.0f});
+        }
+    }
+}
+
 Text get_title(Font& font, Vector2u window_size) {
     const string TITLE_TEXT = "Snake";
     const int32_t TITLE_TEXT_SIZE = 60;
@@ -504,6 +489,42 @@ Button get_exit_button(Font& font, Vector2u window_size) {
     );
     return {exit_button, EXIT_BUTTON_HIGHLIGHT_COLOR, GameState::Exit};
 }
+GameState show_menu(Font& font, RenderWindow& window, const Text& title) {
+    Button start_button = get_start_button(font, window.getSize());
+    Button settings_button = get_settings_button(font, window.getSize());
+    Button about_button = get_about_button(font, window.getSize());
+    Button exit_button = get_exit_button(font, window.getSize());
+    vector<Button> buttons = {start_button, settings_button, about_button, exit_button};
+    while (window.isOpen()) {
+        while (const optional event = window.pollEvent()) {
+            if (event->is<Event::Closed>()) {
+                return Exit;
+            }
+            Vector2i mouse_position = sf::Mouse::getPosition(window);
+            Vector2f mouse_position_float(
+                static_cast<float>(mouse_position.x),
+                static_cast<float>(mouse_position.y)
+            );
+            if (const auto* mouse_pressed_event = event->getIf<Event::MouseButtonPressed>()) {
+                if (optional state =
+                        handle_click(mouse_pressed_event, buttons, mouse_position_float))
+                {
+                    return *state;
+                }
+            }
+            handle_hover(buttons, mouse_position_float);
+        }
+        window.clear(Color::Black);
+        for (auto& button: buttons) {
+            window.draw(button.self);
+        }
+        window.draw(title);
+
+        // 显示
+        window.display();
+    }
+    return Exit;
+}
 GameState should_start(Font& font) {
     RenderWindow window(
         sf::VideoMode(VideoMode::getDesktopMode().size),
@@ -519,19 +540,14 @@ GameState should_start(Font& font) {
         }
     }
 
-    Text title_text = get_title(font, window.getSize());
-    Button start_button = get_start_button(font, window.getSize());
-    Button settings_button = get_settings_button(font, window.getSize());
-    Button about_button = get_about_button(font, window.getSize());
-    Button exit_button = get_exit_button(font, window.getSize());
-    vector<Button> menu_buttons = {start_button, settings_button, about_button, exit_button};
     GameState current_state = GameState::ShowMenu;
     while (true) {
         if (current_state == GameState::StartGame) {
             window.close();
             return GameState::StartGame;
         } else if (current_state == GameState::ShowMenu) {
-            current_state = show_menu(window, title_text, menu_buttons);
+            Text title_text = get_title(font, window.getSize());
+            current_state = show_menu(font, window, title_text);
         } else if (current_state == GameState::ShowSettings) {
             // TODO
         } else if (current_state == GameState::ShowAbout) {
